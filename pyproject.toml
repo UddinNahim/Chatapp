@@ -1,0 +1,20 @@
+[project]
+name = "learn-django-bolt"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "django>=6.1",
+    "django-bolt>=0.10.0",
+    "sockudo-http-python",
+    "websocket-client>=1.9.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "sockudo/server-sdks/sockudo-http-python",
+]
+
+[tool.uv.sources]
+sockudo-http-python = { workspace = true }

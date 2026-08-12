@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sockudo chat</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 42rem; background: #f6f6f6; color: #111; }
+    h1 { margin-top: 0; }
+    #status { padding: 0.75rem 1rem; background: #fff; border: 1px solid #ddd; }
+    #log {
+      white-space: pre-wrap;
+      background: #111;
+      color: #7CFF7C;
+      padding: 1rem;
+      min-height: 12rem;
+      overflow: auto;
+    }
+    .row { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+    input { padding: 0.5rem 0.6rem; flex: 1; min-width: 8rem; }
+    #username { max-width: 10rem; flex: 0 0 10rem; }
+    button { padding: 0.5rem 0.9rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Sockudo chat: general</h1>
+  <p id="status">Page loaded. Loading Pusher SDK…</p>
+  <pre id="log"></pre>
+  <div class="row">
+    <input id="username" value="nahim" placeholder="username" />
+    <input id="text" placeholder="message…" />
+    <button type="button" id="send">Send</button>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const logEl = document.getElementById("log");
+    const textEl = document.getElementById("text");
+
+    function log(msg) {
+      logEl.textContent += msg + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(msg);
+    }
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    function startSubscriber() {
+      if (typeof Pusher === "undefined") {
+        setStatus("ERROR: Pusher SDK failed to load (CDN blocked?).");
+        log("Pusher is not defined");
+        return;
+      }
+
+      setStatus("Pusher loaded. Connecting to Sockudo…");
+
+      const pusher = new Pusher("app-key", {
+        wsHost: "127.0.0.1",
+        wsPort: 6001,
+        wssPort: 6001,
+        forceTLS: false,
+        encrypted: false,
+        cluster: "local",
+        enabledTransports: ["ws"],
+        disabledTransports: ["xhr_streaming", "xhr_polling", "sockjs"],
+        disableStats: true,
+      });
+
+      pusher.connection.bind("state_change", (states) => {
+        log("state: " + states.previous + " -> " + states.current);
+        setStatus("Connection state: " + states.current);
+      });
+
+      pusher.connection.bind("connected", () => {
+        setStatus("Connected — waiting for message.new on chat:general");
+        log("connected socket_id=" + pusher.connection.socket_id);
+      });
+
+      pusher.connection.bind("error", (err) => {
+        setStatus("Connection error — see log");
+        log("error: " + JSON.stringify(err));
+      });
+
+      pusher.connection.bind("failed", () => {
+        setStatus("Connection failed — is Sockudo running on :6001?");
+        log("failed");
+      });
+
+      const channel = pusher.subscribe("chat:general");
+      channel.bind("pusher:subscription_succeeded", () => {
+        log("subscribed to chat:general");
+        setStatus("Subscribed — type a message and Send");
+      });
+      channel.bind("message.new", (data) => {
+        log(data.username + ": " + data.text);
+        setStatus("Got message.new");
+      });
+    }
+
+    async function sendMessage() {
+      const username = document.getElementById("username").value.trim() || "anon";
+      const text = textEl.value.trim();
+      if (!text) return;
+
+      try {
+        const res = await fetch("http://127.0.0.1:8000/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, text }),
+        });
+        if (!res.ok) {
+          log("POST failed: " + res.status + " " + await res.text());
+          return;
+        }
+        textEl.value = "";
+        textEl.focus();
+      } catch (err) {
+        log("POST error: " + err);
+      }
+    }
+
+    document.getElementById("send").onclick = sendMessage;
+    textEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/pusher-js@8.4.0-rc2/dist/web/pusher.min.js";
+    script.onload = startSubscriber;
+    script.onerror = () => {
+      setStatus("jsDelivr failed, trying js.pusher.com…");
+      const fallback = document.createElement("script");
+      fallback.src = "https://js.pusher.com/8.4.0/pusher.min.js";
+      fallback.onload = startSubscriber;
+      fallback.onerror = () => {
+        setStatus("ERROR: could not load Pusher from CDN");
+        log("Both CDNs failed");
+      };
+      document.head.appendChild(fallback);
+    };
+    document.head.appendChild(script);
+  </script>
+</body>
+</html>
