@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sockudo 1:1 DM — 2 clients</title>
+  <style>
+    :root {
+      --bg: #f0f2f5;
+      --card: #fff;
+      --ink: #1a1a1a;
+      --muted: #5c6570;
+      --line: #d8dde3;
+      --accent: #0b57d0;
+      --log: #111;
+      --log-fg: #7cff7c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      padding: 1.25rem;
+    }
+    header { max-width: 56rem; margin: 0 auto 1rem; }
+    h1 { margin: 0 0 0.35rem; font-size: 1.45rem; }
+    .sub { color: var(--muted); margin: 0 0 0.75rem; line-height: 1.45; max-width: 40rem; }
+    .nav a { color: #0b57d0; }
+    .hint {
+      background: #e8eefc;
+      border: 1px solid #b8c9f0;
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.9rem;
+      color: #1a3a7a;
+      margin-bottom: 1rem;
+    }
+    .grid {
+      max-width: 56rem;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.85rem;
+    }
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 24rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .card h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.15rem 0.4rem;
+      border-radius: 999px;
+      background: #eef1f4;
+      color: var(--muted);
+    }
+    .badge.ok { background: #d8e6ff; color: var(--accent); }
+    .badge.bad { background: #fde8e8; color: #a11; }
+    .meta { font-size: 0.8rem; color: var(--muted); margin: 0.35rem 0 0.6rem; line-height: 1.4; }
+    .log {
+      flex: 1;
+      white-space: pre-wrap;
+      background: var(--log);
+      color: var(--log-fg);
+      padding: 0.65rem;
+      border-radius: 6px;
+      min-height: 11rem;
+      max-height: 15rem;
+      overflow: auto;
+      font-size: 0.8rem;
+      margin: 0 0 0.6rem;
+    }
+    .row { display: flex; gap: 0.4rem; }
+    input {
+      flex: 1;
+      padding: 0.45rem 0.55rem;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font: inherit;
+    }
+    button {
+      padding: 0.45rem 0.75rem;
+      border: 1px solid #0842a0;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.ghost {
+      background: #fff;
+      color: var(--accent);
+      border-color: #b8c9f0;
+    }
+    .head-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .unread {
+      min-width: 1.35rem;
+      height: 1.35rem;
+      padding: 0 0.35rem;
+      border-radius: 999px;
+      background: #c5221f;
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .unread[hidden] { display: none; }
+    .toast {
+      display: none;
+      background: #fff6d6;
+      border: 1px solid #e6c200;
+      color: #5c4b00;
+      border-radius: 6px;
+      padding: 0.45rem 0.55rem;
+      font-size: 0.82rem;
+      margin: 0 0 0.5rem;
+    }
+    .toast.show { display: block; }
+    .inbox {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.45rem 0.5rem;
+      margin: 0 0 0.55rem;
+      background: #fafbfc;
+    }
+    .inbox-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+      margin-bottom: 0.35rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .inbox ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 6.5rem;
+      overflow: auto;
+    }
+    .inbox li {
+      font-size: 0.78rem;
+      padding: 0.2rem 0;
+      border-top: 1px solid #eef1f4;
+    }
+    .inbox li:first-child { border-top: 0; }
+    .inbox li.unread-item { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>1:1 DM — 2 clients, one private channel</h1>
+    <p class="sub">
+      দুইটা card = user <strong>1</strong> আর user <strong>2</strong>।
+      চ্যাট যায় <code>private-chat.1.2</code>-এ; নোটিফিকেশন যায় শুধু রিসিভারের
+      <code>private-user.{id}</code>-এ (বেল + টোস্ট + inbox)।
+    </p>
+    <p class="nav">
+      <a href="/">← Group chat</a> ·
+      <a href="/lms.html">LMS instructor ↔ student</a>
+    </p>
+    <div class="hint" id="globalStatus">Loading Pusher SDK…</div>
+  </header>
+
+  <div class="grid" id="cards"></div>
+
+  <script>
+    const PEERS = [
+      { id: 1, peer: 2, name: "User 1", color: "#0b57d0" },
+      { id: 2, peer: 1, name: "User 2", color: "#8a4b08" },
+    ];
+
+    const globalStatus = document.getElementById("globalStatus");
+    const cardsEl = document.getElementById("cards");
+
+    function dmChannelName(a, b) {
+      return "private-chat." + Math.min(a, b) + "." + Math.max(a, b);
+    }
+
+    function mountCard(client) {
+      const channelName = dmChannelName(client.id, client.peer);
+      const el = document.createElement("article");
+      el.className = "card";
+      const inboxName = "private-user." + client.id;
+      el.innerHTML =
+        '<div class="head-row"><h2><span style="color:' + client.color + '">●</span> ' +
+        client.name + ' <span class="badge" data-badge>idle</span></h2>' +
+        '<span class="unread" data-unread hidden>0</span></div>' +
+        '<p class="meta">me=<code>' + client.id + '</code> · peer=<code>' + client.peer +
+        '</code><br>chat: <code>' + channelName + '</code> · inbox: <code>' + inboxName +
+        '</code></p>' +
+        '<div class="toast" data-toast></div>' +
+        '<pre class="log" data-log></pre>' +
+        '<div class="inbox"><div class="inbox-head"><span>Notifications</span>' +
+        '<button type="button" class="ghost" data-read-all>Mark read</button></div>' +
+        '<ul data-inbox></ul></div>' +
+        '<div class="row">' +
+        '<input data-text placeholder="DM as user ' + client.id + '…" />' +
+        '<button type="button" data-send disabled>Send</button>' +
+        "</div>";
+      cardsEl.appendChild(el);
+
+      const logEl = el.querySelector("[data-log]");
+      const badge = el.querySelector("[data-badge]");
+      const unreadEl = el.querySelector("[data-unread]");
+      const toastEl = el.querySelector("[data-toast]");
+      const inboxEl = el.querySelector("[data-inbox]");
+      const textEl = el.querySelector("[data-text]");
+      const sendBtn = el.querySelector("[data-send]");
+      const readAllBtn = el.querySelector("[data-read-all]");
+      let toastTimer = null;
+      let ready = { chat: false, inbox: false };
+
+      function log(msg) {
+        logEl.textContent += msg + "\n";
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function setBadge(text, ok) {
+        badge.textContent = text;
+        badge.className = "badge " + (ok === true ? "ok" : ok === false ? "bad" : "");
+      }
+
+      function maybeEnableSend() {
+        sendBtn.disabled = !(ready.chat && ready.inbox);
+      }
+
+      function setUnread(count) {
+        const n = Number(count) || 0;
+        unreadEl.textContent = String(n);
+        unreadEl.hidden = n <= 0;
+      }
+
+      function showToast(title, body) {
+        toastEl.textContent = title + " — " + body;
+        toastEl.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastEl.classList.remove("show"), 4000);
+      }
+
+      function renderInboxItem(item, prepend) {
+        const li = document.createElement("li");
+        if (!item.read_at) li.className = "unread-item";
+        li.textContent = item.title + ": " + item.body;
+        if (prepend) inboxEl.prepend(li);
+        else inboxEl.appendChild(li);
+      }
+
+      async function loadInbox() {
+        const res = await fetch(
+          "http://127.0.0.1:8000/notifications?user_id=" + client.id
+        );
+        if (!res.ok) {
+          log("inbox GET failed: " + res.status);
+          return;
+        }
+        const data = await res.json();
+        inboxEl.replaceChildren();
+        data.items.slice().reverse().forEach((item) => renderInboxItem(item, false));
+        setUnread(data.unread_count);
+      }
+
+      const pusher = new Pusher("app-key", {
+        wsHost: "127.0.0.1",
+        wsPort: 6001,
+        wssPort: 6001,
+        forceTLS: false,
+        encrypted: false,
+        cluster: "local",
+        enabledTransports: ["ws"],
+        disabledTransports: ["xhr_streaming", "xhr_polling", "sockjs"],
+        disableStats: true,
+        channelAuthorization: {
+          endpoint: "http://127.0.0.1:8000/pusher/auth",
+          params: { user_id: String(client.id) },
+        },
+      });
+
+      pusher.connection.bind("state_change", (states) => {
+        log("state: " + states.previous + " → " + states.current);
+        setBadge(states.current, states.current === "connected" ? true : null);
+      });
+
+      pusher.connection.bind("connected", () => {
+        log("connected socket_id=" + pusher.connection.socket_id);
+      });
+
+      pusher.connection.bind("failed", () => {
+        setBadge("failed", false);
+        log("failed — is Sockudo on :6001?");
+      });
+
+      const channel = pusher.subscribe(channelName);
+      channel.bind("pusher:subscription_succeeded", () => {
+        log("subscribed " + channelName);
+        ready.chat = true;
+        if (ready.inbox) setBadge("subscribed", true);
+        maybeEnableSend();
+      });
+      channel.bind("pusher:subscription_error", (status) => {
+        log("chat auth error " + JSON.stringify(status));
+        setBadge("auth failed", false);
+      });
+      channel.bind("message.new", (data) => {
+        const mine = data.from_user_id === client.id ? " (me)" : "";
+        log(data.from_user_id + " → " + data.to_user_id + ": " + data.text + mine);
+      });
+
+      const inboxCh = pusher.subscribe(inboxName);
+      inboxCh.bind("pusher:subscription_succeeded", () => {
+        log("subscribed " + inboxName);
+        ready.inbox = true;
+        if (ready.chat) setBadge("subscribed", true);
+        maybeEnableSend();
+        loadInbox();
+      });
+      inboxCh.bind("pusher:subscription_error", (status) => {
+        log("inbox auth error " + JSON.stringify(status));
+        setBadge("auth failed", false);
+      });
+      inboxCh.bind("notification.new", (n) => {
+        log("notif: " + n.title + " — " + n.body);
+        setUnread(n.unread_count);
+        showToast(n.title, n.body);
+        renderInboxItem(n, true);
+      });
+
+      async function send() {
+        const text = textEl.value.trim();
+        if (!text) return;
+        sendBtn.disabled = true;
+        try {
+          const res = await fetch("http://127.0.0.1:8000/dm/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from_user_id: client.id,
+              to_user_id: client.peer,
+              text,
+            }),
+          });
+          if (!res.ok) {
+            log("POST failed: " + res.status + " " + await res.text());
+            return;
+          }
+          textEl.value = "";
+          textEl.focus();
+        } catch (err) {
+          log("POST error: " + err);
+        } finally {
+          sendBtn.disabled = false;
+        }
+      }
+
+      sendBtn.onclick = send;
+      textEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") send();
+      });
+      readAllBtn.onclick = async () => {
+        try {
+          const res = await fetch("http://127.0.0.1:8000/notifications/read-all", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: client.id }),
+          });
+          if (!res.ok) {
+            log("read-all failed: " + res.status);
+            return;
+          }
+          setUnread(0);
+          inboxEl.querySelectorAll("li").forEach((li) => li.classList.remove("unread-item"));
+        } catch (err) {
+          log("read-all error: " + err);
+        }
+      };
+    }
+
+    function startAll() {
+      if (typeof Pusher === "undefined") {
+        globalStatus.textContent = "ERROR: Pusher SDK failed to load";
+        return;
+      }
+      globalStatus.textContent =
+        "Send করলে দুই card-এই message যাবে। নোটিফিকেশন শুধু অন্যজনের বেল/টোস্ট/inbox-এ — নিজেরটায় নয়।";
+      PEERS.forEach(mountCard);
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/pusher-js@8.4.0-rc2/dist/web/pusher.min.js";
+    script.onload = startAll;
+    script.onerror = () => {
+      const fallback = document.createElement("script");
+      fallback.src = "https://js.pusher.com/8.4.0/pusher.min.js";
+      fallback.onload = startAll;
+      fallback.onerror = () => {
+        globalStatus.textContent = "ERROR: could not load Pusher from CDN";
+      };
+      document.head.appendChild(fallback);
+    };
+    document.head.appendChild(script);
+  </script>
+</body>
+</html>
