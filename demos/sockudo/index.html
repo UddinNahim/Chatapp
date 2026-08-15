@@ -2,60 +2,141 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Sockudo chat</title>
+  <title>Sockudo group chat — 3 clients</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 42rem; background: #f6f6f6; color: #111; }
-    h1 { margin-top: 0; }
-    #status { padding: 0.75rem 1rem; background: #fff; border: 1px solid #ddd; }
-    #log {
-      white-space: pre-wrap;
-      background: #111;
-      color: #7CFF7C;
-      padding: 1rem;
-      min-height: 12rem;
-      overflow: auto;
+    :root {
+      --bg: #f0f2f5;
+      --card: #fff;
+      --ink: #1a1a1a;
+      --muted: #5c6570;
+      --line: #d8dde3;
+      --accent: #0b6e4f;
+      --log: #111;
+      --log-fg: #7cff7c;
     }
-    .row { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
-    input { padding: 0.5rem 0.6rem; flex: 1; min-width: 8rem; }
-    #username { max-width: 10rem; flex: 0 0 10rem; }
-    button { padding: 0.5rem 0.9rem; cursor: pointer; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      padding: 1.25rem;
+    }
+    header { max-width: 72rem; margin: 0 auto 1rem; }
+    h1 { margin: 0 0 0.35rem; font-size: 1.45rem; }
+    .sub { color: var(--muted); margin: 0 0 0.75rem; line-height: 1.45; max-width: 40rem; }
+    .nav a { color: #0b57d0; }
+    .hint {
+      background: #e8f5ef;
+      border: 1px solid #b7dfc9;
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.9rem;
+      color: #145c40;
+      margin-bottom: 1rem;
+    }
+    .grid {
+      max-width: 72rem;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.85rem;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 22rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .card h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.15rem 0.4rem;
+      border-radius: 999px;
+      background: #eef1f4;
+      color: var(--muted);
+    }
+    .badge.ok { background: #d8f3e7; color: var(--accent); }
+    .badge.bad { background: #fde8e8; color: #a11; }
+    .meta { font-size: 0.8rem; color: var(--muted); margin: 0.35rem 0 0.6rem; }
+    .log {
+      flex: 1;
+      white-space: pre-wrap;
+      background: var(--log);
+      color: var(--log-fg);
+      padding: 0.65rem;
+      border-radius: 6px;
+      min-height: 10rem;
+      max-height: 14rem;
+      overflow: auto;
+      font-size: 0.8rem;
+      margin: 0 0 0.6rem;
+    }
+    .row { display: flex; gap: 0.4rem; }
+    input {
+      flex: 1;
+      padding: 0.45rem 0.55rem;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font: inherit;
+    }
+    button {
+      padding: 0.45rem 0.75rem;
+      border: 1px solid #0a5c42;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body>
-  <h1>Sockudo chat: general</h1>
-  <p id="status">Page loaded. Loading Pusher SDK…</p>
-  <pre id="log"></pre>
-  <div class="row">
-    <input id="username" value="nahim" placeholder="username" />
-    <input id="text" placeholder="message…" />
-    <button type="button" id="send">Send</button>
-  </div>
+  <header>
+    <h1>Group chat — 3 clients, one public channel</h1>
+    <p class="sub">
+      তিনটা card = তিনটা আলাদা browser client। সবাই
+      <code>chat-general</code>-এ subscribe করে। একজন Send করলে
+      <strong>তিনজনেই</strong> event পায় (lobby / broadcast)।
+    </p>
+    <p class="nav">
+      <a href="/dm.html">1:1 DM (2 cards)</a> ·
+      <a href="/lms.html">LMS instructor ↔ student</a>
+    </p>
+    <div class="hint" id="globalStatus">Loading Pusher SDK…</div>
+  </header>
+
+  <div class="grid" id="cards"></div>
 
   <script>
-    const statusEl = document.getElementById("status");
-    const logEl = document.getElementById("log");
-    const textEl = document.getElementById("text");
+    const CLIENTS = [
+      { id: "a", name: "Alice", color: "#0b6e4f" },
+      { id: "b", name: "Bob", color: "#0b57d0" },
+      { id: "c", name: "Carol", color: "#8a4b08" },
+    ];
 
-    function log(msg) {
-      logEl.textContent += msg + "\n";
-      logEl.scrollTop = logEl.scrollHeight;
-      console.log(msg);
-    }
+    const globalStatus = document.getElementById("globalStatus");
+    const cardsEl = document.getElementById("cards");
 
-    function setStatus(msg) {
-      statusEl.textContent = msg;
-    }
-
-    function startSubscriber() {
-      if (typeof Pusher === "undefined") {
-        setStatus("ERROR: Pusher SDK failed to load (CDN blocked?).");
-        log("Pusher is not defined");
-        return;
-      }
-
-      setStatus("Pusher loaded. Connecting to Sockudo…");
-
-      const pusher = new Pusher("app-key", {
+    function pusherOptions() {
+      return {
         wsHost: "127.0.0.1",
         wsPort: 6001,
         wssPort: 6001,
@@ -65,77 +146,109 @@
         enabledTransports: ["ws"],
         disabledTransports: ["xhr_streaming", "xhr_polling", "sockjs"],
         disableStats: true,
-      });
+      };
+    }
+
+    function mountCard(client) {
+      const el = document.createElement("article");
+      el.className = "card";
+      el.innerHTML =
+        '<h2><span style="color:' + client.color + '">●</span> ' + client.name +
+        ' <span class="badge" data-badge>idle</span></h2>' +
+        '<p class="meta">channel: <code>chat-general</code> · event: <code>message.new</code></p>' +
+        '<pre class="log" data-log></pre>' +
+        '<div class="row">' +
+        '<input data-text placeholder="Say something as ' + client.name + '…" />' +
+        '<button type="button" data-send disabled>Send</button>' +
+        "</div>";
+      cardsEl.appendChild(el);
+
+      const logEl = el.querySelector("[data-log]");
+      const badge = el.querySelector("[data-badge]");
+      const textEl = el.querySelector("[data-text]");
+      const sendBtn = el.querySelector("[data-send]");
+
+      function log(msg) {
+        logEl.textContent += msg + "\n";
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function setBadge(text, ok) {
+        badge.textContent = text;
+        badge.className = "badge " + (ok === true ? "ok" : ok === false ? "bad" : "");
+      }
+
+      const pusher = new Pusher("app-key", pusherOptions());
 
       pusher.connection.bind("state_change", (states) => {
-        log("state: " + states.previous + " -> " + states.current);
-        setStatus("Connection state: " + states.current);
-      });
-
-      pusher.connection.bind("connected", () => {
-        setStatus("Connected — waiting for message.new on chat:general");
-        log("connected socket_id=" + pusher.connection.socket_id);
-      });
-
-      pusher.connection.bind("error", (err) => {
-        setStatus("Connection error — see log");
-        log("error: " + JSON.stringify(err));
+        log("state: " + states.previous + " → " + states.current);
+        setBadge(states.current, states.current === "connected" ? true : null);
       });
 
       pusher.connection.bind("failed", () => {
-        setStatus("Connection failed — is Sockudo running on :6001?");
-        log("failed");
+        setBadge("failed", false);
+        log("failed — is Sockudo on :6001?");
       });
 
-      const channel = pusher.subscribe("chat:general");
+      const channel = pusher.subscribe("chat-general");
       channel.bind("pusher:subscription_succeeded", () => {
-        log("subscribed to chat:general");
-        setStatus("Subscribed — type a message and Send");
+        log("subscribed to chat-general");
+        setBadge("subscribed", true);
+        sendBtn.disabled = false;
       });
       channel.bind("message.new", (data) => {
-        log(data.username + ": " + data.text);
-        setStatus("Got message.new");
+        const mine = data.username === client.name ? " (me)" : "";
+        log(data.username + ": " + data.text + mine);
+      });
+
+      async function send() {
+        const text = textEl.value.trim();
+        if (!text) return;
+        sendBtn.disabled = true;
+        try {
+          const res = await fetch("http://127.0.0.1:8000/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: client.name, text }),
+          });
+          if (!res.ok) {
+            log("POST failed: " + res.status + " " + await res.text());
+            return;
+          }
+          textEl.value = "";
+          textEl.focus();
+        } catch (err) {
+          log("POST error: " + err);
+        } finally {
+          sendBtn.disabled = false;
+        }
+      }
+
+      sendBtn.onclick = send;
+      textEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") send();
       });
     }
 
-    async function sendMessage() {
-      const username = document.getElementById("username").value.trim() || "anon";
-      const text = textEl.value.trim();
-      if (!text) return;
-
-      try {
-        const res = await fetch("http://127.0.0.1:8000/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, text }),
-        });
-        if (!res.ok) {
-          log("POST failed: " + res.status + " " + await res.text());
-          return;
-        }
-        textEl.value = "";
-        textEl.focus();
-      } catch (err) {
-        log("POST error: " + err);
+    function startAll() {
+      if (typeof Pusher === "undefined") {
+        globalStatus.textContent = "ERROR: Pusher SDK failed to load";
+        return;
       }
+      globalStatus.textContent =
+        "৩টা আলাদা WebSocket client → একই public channel। যেকোনো card থেকে Send করো — তিনটাতেই দেখা যাবে।";
+      CLIENTS.forEach(mountCard);
     }
-
-    document.getElementById("send").onclick = sendMessage;
-    textEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") sendMessage();
-    });
 
     const script = document.createElement("script");
     script.src = "https://cdn.jsdelivr.net/npm/pusher-js@8.4.0-rc2/dist/web/pusher.min.js";
-    script.onload = startSubscriber;
+    script.onload = startAll;
     script.onerror = () => {
-      setStatus("jsDelivr failed, trying js.pusher.com…");
       const fallback = document.createElement("script");
       fallback.src = "https://js.pusher.com/8.4.0/pusher.min.js";
-      fallback.onload = startSubscriber;
+      fallback.onload = startAll;
       fallback.onerror = () => {
-        setStatus("ERROR: could not load Pusher from CDN");
-        log("Both CDNs failed");
+        globalStatus.textContent = "ERROR: could not load Pusher from CDN";
       };
       document.head.appendChild(fallback);
     };
