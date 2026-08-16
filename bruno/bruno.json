@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Learn Django-Bolt Chat",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

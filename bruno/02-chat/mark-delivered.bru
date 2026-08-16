@@ -1,0 +1,31 @@
+meta {
+  name: Mark delivered
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/chat/messages/{{messageId}}/delivered
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "user_id": {{otherUserId}}
+  }
+}
+
+docs {
+  POST /chat/messages/{message_id}/delivered
+
+  Recipient device got the message (chat does not have to be open).
+  Sets MessageReceipt.delivered_at only. Does not set read_at.
+  No-op if user_id is the sender.
+
+  Publishes receipt.update on the room channel (sender ticks: delivered).
+
+  In the UI this runs on inbox.update or message.new.
+  In 1:1, delivered_at on the message becomes this timestamp.
+  In a group it stays null until every recipient has delivered.
+}

@@ -1,0 +1,40 @@
+meta {
+  name: Send message
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/chat/rooms/{{roomId}}/messages
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "user_id": {{userId}},
+    "text": "hello from bruno"
+  }
+}
+
+script:post-response {
+  if (res.status === 200 && res.body && res.body.id) {
+    bru.setEnvVar("messageId", String(res.body.id));
+  }
+}
+
+docs {
+  POST /chat/rooms/{room_id}/messages
+
+  Saves the message, creates empty MessageReceipt rows for everyone else,
+  publishes message.new on private-room.{id},
+  and inbox.update on each other member's private-user.{id}.
+
+  Sender last_read_at moves forward so their own text is not unread.
+  Recipients' unread goes up (last_read_at unchanged).
+
+  Response starts as sent only: delivered_at and read_at are null.
+  Saves messageId on 200.
+
+  Then call List rooms as otherUserId, Mark delivered, Mark room read.
+}

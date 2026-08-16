@@ -1,0 +1,28 @@
+meta {
+  name: List messages
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/chat/rooms/{{roomId}}/messages?user_id={{userId}}
+  body: none
+  auth: none
+}
+
+docs {
+  GET /chat/rooms/{room_id}/messages?user_id=
+
+  History for one room (oldest → newest), plus receipt fields.
+
+  Side effect: incoming messages are stamped delivered for this user
+  and the room gets receipt.update (sender ticks).
+
+  403 if user_id is not a member.
+
+  Each item:
+  - created_at: sent time
+  - delivered_at / read_at: set only when ALL recipients have that status
+  - delivered_count / read_count / recipient_count: group progress
+  - receipts[]: per-recipient times
+}

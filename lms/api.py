@@ -7,7 +7,7 @@ from django.utils import timezone
 from django_bolt import BoltAPI, cors
 from django_bolt.exceptions import HTTPException
 from django_bolt.param_functions import Form
-from sockudo_http import Config, Sockudo
+from sockudo_http import Config, Sockudo, TriggerOptions
 
 from lms.models import Instructor, LmsNotification, Message, Post, Student
 
@@ -187,9 +187,9 @@ def require_pair(instructor_id: int, student_id: int) -> tuple[Instructor, Stude
     return instructor, student
 
 
-@api.post("/lms/pusher/auth")
+@api.post("/lms/auth")
 @cors(**CORS_DEMO)
-def lms_pusher_auth(
+def lms_auth(
     socket_id: str = Form(...),
     channel_name: str = Form(...),
     role: str | None = Form(None),
@@ -281,6 +281,7 @@ def create_message(payload: MessageCreateSchema) -> MessageSchema:
                 "sender": data.sender,
                 "text": data.text,
             },
+            TriggerOptions(idempotency_key=f"lms-msg-{message.id}"),
         )
         if not result.ok:
             raise HTTPException(
@@ -291,6 +292,7 @@ def create_message(payload: MessageCreateSchema) -> MessageSchema:
             inbox_channel(to_role, to_id),
             "notification.new",
             inbox_event,
+            TriggerOptions(idempotency_key=f"lms-notif-{inbox.id}"),
         )
         if not notify.ok:
             raise HTTPException(

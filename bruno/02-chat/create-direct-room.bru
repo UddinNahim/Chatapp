@@ -1,0 +1,39 @@
+meta {
+  name: Create direct room
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/chat/rooms
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "user_id": {{userId}},
+    "kind": "direct",
+    "member_ids": [{{otherUserId}}],
+    "title": ""
+  }
+}
+
+script:post-response {
+  if (res.status === 200 && res.body && res.body.id) {
+    bru.setEnvVar("roomId", String(res.body.id));
+  }
+}
+
+docs {
+  POST /chat/rooms  (kind: direct)
+
+  1:1 room between userId and otherUserId.
+  member_ids must be exactly one other user.
+  pair_key is min:max so Alice→Bob and Bob→Alice reuse the same room.
+
+  On first create, both inboxes get event room.created.
+  If the pair already exists, that room is returned (no duplicate).
+
+  Saves roomId into the local environment on 200.
+}

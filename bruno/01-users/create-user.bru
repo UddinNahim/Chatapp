@@ -1,0 +1,25 @@
+meta {
+  name: Create user
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/users
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "alice",
+    "email": "alice@demo.local"
+  }
+}
+
+docs {
+  POST /users
+
+  Creates a demo user. 409 if username already exists.
+  Change username/email and run again for a second person.
+}

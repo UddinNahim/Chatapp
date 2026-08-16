@@ -1,0 +1,25 @@
+headers {
+  Content-Type: application/json
+}
+
+docs {
+  WhatsApp-style rooms on Django-Bolt + Sockudo.
+
+  Open this folder in Bruno (Open Collection).
+  Select environment: local
+  Django must be running: http://127.0.0.1:8000
+
+  Suggested order:
+  1. Users → List users (copy two ids into env userId / otherUserId)
+  2. Chat → Create direct room or Create group room (saves roomId)
+  3. Chat → List rooms (unread + total_unread)
+  4. Chat → Send message as userId (saves messageId)
+  5. Chat → List rooms as otherUserId (unread should rise)
+  6. Chat → Mark delivered as otherUserId
+  7. Chat → Mark room read as otherUserId (unread 0, read ticks)
+
+  Live bubbles need Sockudo + chat.html. These requests test HTTP only.
+
+  unread = messages after RoomMember.last_read_at, excluding my own.
+  delivered/read = MessageReceipt rows per recipient (ticks), not the badge.
+}

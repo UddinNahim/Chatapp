@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>WhatsApp-style rooms</title>
+  <style>
+    :root {
+      --bg: #111b21;
+      --side: #111b21;
+      --panel: #202c33;
+      --ink: #e9edef;
+      --muted: #8696a0;
+      --line: #2a3942;
+      --green: #00a884;
+      --mine: #005c4b;
+      --theirs: #202c33;
+      --unread: #25d366;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #0b141a;
+      color: var(--ink);
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 22rem 1fr;
+      height: 100%;
+      max-width: 80rem;
+      margin: 0 auto;
+      border-left: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+    }
+    @media (max-width: 800px) { .app { grid-template-columns: 1fr; } }
+    .sidebar { background: var(--side); display: flex; flex-direction: column; min-height: 0; }
+    .top {
+      background: var(--panel);
+      padding: 0.7rem 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .top h1 { margin: 0; font-size: 1.05rem; }
+    .total {
+      min-width: 1.4rem;
+      height: 1.4rem;
+      padding: 0 0.4rem;
+      border-radius: 999px;
+      background: var(--unread);
+      color: #111;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .total[hidden] { display: none; }
+    .who { padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--line); }
+    .who label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.3rem; }
+    select, input, button, textarea {
+      font: inherit;
+      color: var(--ink);
+    }
+    select, input, textarea {
+      width: 100%;
+      background: #2a3942;
+      border: 0;
+      border-radius: 8px;
+      padding: 0.45rem 0.6rem;
+    }
+    .actions { display: flex; gap: 0.4rem; padding: 0.55rem 0.85rem; }
+    button {
+      border: 0;
+      background: var(--green);
+      color: #111;
+      border-radius: 8px;
+      padding: 0.4rem 0.65rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.ghost { background: #2a3942; color: var(--ink); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .rooms { flex: 1; overflow: auto; }
+    .room {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.2rem 0.6rem;
+      padding: 0.7rem 0.85rem;
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .room:hover, .room.active { background: #2a3942; }
+    .room .name { font-weight: 600; }
+    .room .kind { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
+    .room .preview { grid-column: 1; color: var(--muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .room .badge {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      align-self: center;
+      min-width: 1.25rem;
+      height: 1.25rem;
+      padding: 0 0.35rem;
+      border-radius: 999px;
+      background: var(--unread);
+      color: #111;
+      font-size: 0.72rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .room .badge[hidden] { display: none; }
+    .chat { display: flex; flex-direction: column; min-height: 0; background: #0b141a; }
+    .chat-head {
+      background: var(--panel);
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .chat-head h2 { margin: 0; font-size: 1.05rem; }
+    .chat-head p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.8rem; }
+    .msgs {
+      flex: 1;
+      overflow: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .empty { margin: auto; color: var(--muted); text-align: center; max-width: 22rem; }
+    .bubble {
+      max-width: 70%;
+      padding: 0.4rem 0.55rem;
+      border-radius: 8px;
+      font-size: 0.92rem;
+      line-height: 1.35;
+      white-space: pre-wrap;
+    }
+    .bubble.mine { align-self: flex-end; background: var(--mine); }
+    .bubble.theirs { align-self: flex-start; background: var(--theirs); }
+    .bubble small { display: block; color: #ffffff99; font-size: 0.7rem; margin-top: 0.2rem; }
+    .bubble .ticks { color: #ffffffaa; }
+    .bubble .ticks.read { color: #53bdeb; }
+    .composer {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.7rem;
+      background: var(--panel);
+    }
+    .composer input { flex: 1; width: auto; }
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #0008;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal.show { display: flex; }
+    .sheet {
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 1rem;
+      width: min(26rem, 100%);
+    }
+    .sheet h3 { margin: 0 0 0.7rem; }
+    .sheet label { display: block; margin: 0.45rem 0 0.2rem; color: var(--muted); font-size: 0.8rem; }
+    .people { max-height: 12rem; overflow: auto; margin: 0.4rem 0 0.8rem; }
+    .people label { color: var(--ink); display: flex; gap: 0.45rem; align-items: center; }
+    .people input { width: auto; }
+    .nav { padding: 0.5rem 0.85rem 0.8rem; font-size: 0.78rem; }
+    .nav a { color: var(--green); }
+    .hint { color: var(--muted); font-size: 0.78rem; padding: 0 0.85rem 0.6rem; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="top">
+        <h1>Chats</h1>
+        <span class="total" id="totalUnread" hidden>0</span>
+      </div>
+      <div class="who">
+        <label>I am</label>
+        <select id="me"></select>
+      </div>
+      <div class="actions">
+        <button type="button" id="newDirect">New chat</button>
+        <button type="button" class="ghost" id="newGroup">New group</button>
+      </div>
+      <p class="hint" id="status">Pick a user, then open two tabs as different people.</p>
+      <div class="rooms" id="rooms"></div>
+      <div class="nav">
+        <a href="/">Group lobby</a> ·
+        <a href="/dm.html">Old DM</a> ·
+        <a href="/lms.html">LMS</a>
+      </div>
+    </aside>
+    <main class="chat">
+      <div class="chat-head">
+        <h2 id="chatTitle">WhatsApp-style rooms</h2>
+        <p id="chatMeta">1:1 or group. Unread is per room and total.</p>
+      </div>
+      <div class="msgs" id="msgs">
+        <div class="empty">Select a conversation or create one.</div>
+      </div>
+      <form class="composer" id="composer" hidden>
+        <input id="text" autocomplete="off" placeholder="Type a message" />
+        <button type="submit" id="send">Send</button>
+      </form>
+    </main>
+  </div>
+
+  <div class="modal" id="modal">
+    <form class="sheet" id="createForm">
+      <h3 id="modalTitle">New chat</h3>
+      <div id="titleWrap" hidden>
+        <label>Group name</label>
+        <input id="groupTitle" placeholder="Project team" />
+      </div>
+      <label>People</label>
+      <div class="people" id="people"></div>
+      <p class="hint" id="createError" hidden></p>
+      <div class="actions" style="padding: 0">
+        <button type="submit">Create</button>
+        <button type="button" class="ghost" id="cancelCreate">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <script type="module">
+    import { createSockudoClient, onSubscribeError, onSubscribed } from "./sockudo-v2.js";
+
+    const API = "http://127.0.0.1:8000";
+    const meEl = document.getElementById("me");
+    const roomsEl = document.getElementById("rooms");
+    const msgsEl = document.getElementById("msgs");
+    const totalEl = document.getElementById("totalUnread");
+    const statusEl = document.getElementById("status");
+    const composer = document.getElementById("composer");
+    const textEl = document.getElementById("text");
+    const modal = document.getElementById("modal");
+    const titleWrap = document.getElementById("titleWrap");
+    const groupTitle = document.getElementById("groupTitle");
+    const peopleEl = document.getElementById("people");
+    const modalTitle = document.getElementById("modalTitle");
+
+    let users = [];
+    let me = null;
+    let rooms = [];
+    let openRoom = null;
+    let sockudo = null;
+    let roomChannel = null;
+    let createKind = "direct";
+    const seen = new Map();
+
+    async function api(path, options) {
+      const res = await fetch(API + path, options);
+      if (!res.ok) throw new Error(await res.text() || res.status);
+      return res.json();
+    }
+
+    function setTotal(n) {
+      const count = Number(n) || 0;
+      totalEl.textContent = String(count);
+      totalEl.hidden = count <= 0;
+      document.title = count ? "(" + count + ") Chats" : "WhatsApp-style rooms";
+    }
+
+    function preview(room) {
+      if (!room.last_message) return "No messages yet";
+      return room.last_message.sender + ": " + room.last_message.text;
+    }
+
+    function renderRooms() {
+      roomsEl.replaceChildren();
+      rooms.forEach((room) => {
+        const row = document.createElement("div");
+        row.className = "room" + (openRoom && openRoom.id === room.id ? " active" : "");
+        row.innerHTML =
+          '<div><span class="name"></span> <span class="kind"></span></div>' +
+          '<span class="badge" hidden>0</span>' +
+          '<div class="preview"></div>';
+        row.querySelector(".name").textContent = room.title;
+        row.querySelector(".kind").textContent = room.kind;
+        row.querySelector(".preview").textContent = preview(room);
+        const badge = row.querySelector(".badge");
+        badge.textContent = String(room.unread || 0);
+        badge.hidden = !room.unread;
+        row.onclick = () => open(room.id);
+        roomsEl.appendChild(row);
+      });
+    }
+
+    function upsertRoom(room) {
+      const idx = rooms.findIndex((r) => r.id === room.id);
+      if (idx >= 0) rooms[idx] = { ...rooms[idx], ...room };
+      else rooms.unshift(room);
+      rooms.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+      renderRooms();
+    }
+
+    function clock(value) {
+      return value ? String(value).slice(11, 16) : "";
+    }
+
+    function receiptLine(item) {
+      const sent = clock(item.created_at);
+      if (!(item.mine || item.sender_id === me)) {
+        return (item.sender || "") + " · " + sent;
+      }
+      const n = item.recipient_count || 0;
+      if (item.read_at) {
+        return sent + " · ✓✓ read " + clock(item.read_at) + (n > 1 ? " (" + item.read_count + "/" + n + ")" : "");
+      }
+      if (item.delivered_at) {
+        return sent + " · ✓✓ delivered " + clock(item.delivered_at) + (n > 1 ? " (" + item.delivered_count + "/" + n + ")" : "");
+      }
+      if (n > 1 && (item.delivered_count || item.read_count)) {
+        return sent + " · ✓ delivered " + (item.delivered_count || 0) + "/" + n + " · read " + (item.read_count || 0) + "/" + n;
+      }
+      return sent + " · ✓ sent";
+    }
+
+    function bubble(item) {
+      let el = seen.get(item.id);
+      if (!el) {
+        const empty = msgsEl.querySelector(".empty");
+        if (empty) empty.remove();
+        el = document.createElement("div");
+        el.className = "bubble " + (item.mine || item.sender_id === me ? "mine" : "theirs");
+        el.appendChild(document.createTextNode(item.text));
+        const meta = document.createElement("small");
+        meta.className = "ticks";
+        el.appendChild(meta);
+        msgsEl.appendChild(el);
+        seen.set(item.id, el);
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+      }
+      const meta = el.querySelector("small");
+      meta.textContent = receiptLine(item);
+      meta.className = "ticks" + (item.read_at ? " read" : "");
+    }
+
+    function ackDelivered(messageId) {
+      if (!messageId) return;
+      api("/chat/messages/" + messageId + "/delivered", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: me }),
+      }).catch(() => {});
+    }
+
+    async function loadRooms() {
+      const data = await api("/chat/rooms?user_id=" + me);
+      rooms = data.rooms;
+      setTotal(data.total_unread);
+      renderRooms();
+    }
+
+    async function open(roomId) {
+      const data = await api("/chat/rooms/" + roomId + "/messages?user_id=" + me);
+      openRoom = data.room;
+      upsertRoom(data.room);
+      document.getElementById("chatTitle").textContent = data.room.title;
+      document.getElementById("chatMeta").textContent =
+        data.room.kind + " · " + data.room.members.map((m) => m.username).join(", ");
+      composer.hidden = false;
+      msgsEl.replaceChildren();
+      seen.clear();
+      if (!data.items.length) {
+        msgsEl.innerHTML = '<div class="empty">No messages yet. Say hello.</div>';
+      } else {
+        data.items.forEach(bubble);
+      }
+      const read = await api("/chat/rooms/" + roomId + "/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: me }),
+      });
+      openRoom.unread = 0;
+      upsertRoom(openRoom);
+      setTotal(read.total_unread);
+      renderRooms();
+
+      if (roomChannel) sockudo.unsubscribe(roomChannel);
+      roomChannel = "private-room." + roomId;
+      const ch = sockudo.subscribe(roomChannel);
+      onSubscribed(ch, () => { statusEl.textContent = "subscribed " + roomChannel; });
+      onSubscribeError(ch, (err) => { statusEl.textContent = "room auth failed " + JSON.stringify(err); });
+      ch.bind("message.new", (msg) => {
+        bubble({ ...msg, mine: msg.sender_id === me });
+        if (msg.sender_id !== me) ackDelivered(msg.id);
+        if (openRoom && openRoom.id === msg.room_id && msg.sender_id !== me) {
+          api("/chat/rooms/" + msg.room_id + "/read", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: me }),
+          }).then((r) => setTotal(r.total_unread));
+        }
+      });
+      ch.bind("receipt.update", (payload) => {
+        (payload.items || []).forEach((item) => bubble({ ...item, mine: item.sender_id === me }));
+      });
+    }
+
+    function connectInbox() {
+      if (sockudo) sockudo.disconnect();
+      roomChannel = null;
+      sockudo = createSockudoClient({
+        endpoint: API + "/chat/auth",
+        params: { user_id: String(me) },
+      });
+      sockudo.connection.bind("state_change", (s) => {
+        statusEl.textContent = s.current;
+      });
+      const inbox = sockudo.subscribe("private-user." + me);
+      onSubscribed(inbox, () => { statusEl.textContent = "inbox ready"; });
+      onSubscribeError(inbox, (err) => { statusEl.textContent = "inbox auth failed " + JSON.stringify(err); });
+      inbox.bind("inbox.update", (payload) => {
+        if (openRoom && payload.room_id === openRoom.id) payload.unread = 0;
+        upsertRoom(payload);
+        setTotal(payload.total_unread);
+        const last = payload.last_message;
+        if (payload.event === "message.new" && last && last.sender_id !== me) {
+          ackDelivered(last.id);
+        }
+      });
+    }
+
+    async function ensureUsers() {
+      users = await api("/users");
+      if (!users.length) {
+        for (const name of ["alice", "bob", "carol"]) {
+          try {
+            await api("/users", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ username: name, email: name + "@demo.local" }),
+            });
+          } catch (_) {}
+        }
+        users = await api("/users");
+      }
+      meEl.replaceChildren();
+      users.forEach((u) => {
+        const opt = document.createElement("option");
+        opt.value = String(u.id);
+        opt.textContent = u.username + " #" + u.id;
+        meEl.appendChild(opt);
+      });
+    }
+
+    function fillPeople() {
+      peopleEl.replaceChildren();
+      users.filter((u) => u.id !== me).forEach((u) => {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.type = createKind === "direct" ? "radio" : "checkbox";
+        input.name = "member";
+        input.value = String(u.id);
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(u.username + " #" + u.id));
+        peopleEl.appendChild(label);
+      });
+    }
+
+    function openModal(kind) {
+      createKind = kind;
+      modalTitle.textContent = kind === "group" ? "New group" : "New chat";
+      titleWrap.hidden = kind !== "group";
+      groupTitle.value = kind === "group" ? "New group" : "";
+      document.getElementById("createError").hidden = true;
+      fillPeople();
+      modal.classList.add("show");
+    }
+
+    document.getElementById("newDirect").onclick = () => openModal("direct");
+    document.getElementById("newGroup").onclick = () => openModal("group");
+    document.getElementById("cancelCreate").onclick = () => modal.classList.remove("show");
+
+    document.getElementById("createForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById("createError");
+      const picked = [...peopleEl.querySelectorAll("input:checked")].map((el) => Number(el.value));
+      if (!picked.length) {
+        errEl.textContent = "Pick at least one person.";
+        errEl.hidden = false;
+        return;
+      }
+      try {
+        const room = await api("/chat/rooms", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: me,
+            kind: createKind,
+            member_ids: picked,
+            title: groupTitle.value.trim() || "New group",
+          }),
+        });
+        modal.classList.remove("show");
+        upsertRoom(room);
+        open(room.id);
+      } catch (err) {
+        errEl.textContent = String(err.message || err);
+        errEl.hidden = false;
+      }
+    };
+
+    composer.onsubmit = async (e) => {
+      e.preventDefault();
+      if (!openRoom) return;
+      const text = textEl.value.trim();
+      if (!text) return;
+      textEl.value = "";
+      const msg = await api("/chat/rooms/" + openRoom.id + "/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: me, text }),
+      });
+      bubble({ ...msg, mine: true });
+      openRoom.last_message = msg;
+      openRoom.updated_at = msg.created_at;
+      upsertRoom(openRoom);
+    };
+
+    meEl.onchange = async () => {
+      me = Number(meEl.value);
+      openRoom = null;
+      rooms = [];
+      msgsEl.innerHTML = '<div class="empty">Select a conversation or create one.</div>';
+      composer.hidden = true;
+      connectInbox();
+      await loadRooms();
+    };
+
+    await ensureUsers();
+    me = Number(meEl.value);
+    connectInbox();
+    await loadRooms();
+  </script>
+</body>
+</html>

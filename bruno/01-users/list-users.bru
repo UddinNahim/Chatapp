@@ -1,0 +1,24 @@
+meta {
+  name: List users
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/users
+  body: none
+  auth: none
+}
+
+docs {
+  GET /users
+
+  Returns every Django user. Use two ids as userId and otherUserId
+  in the local environment before calling chat routes.
+
+  Example response:
+  [
+    { "id": 1, "username": "nahim", "email": "..." },
+    { "id": 2, "username": "test", "email": "..." }
+  ]
+}

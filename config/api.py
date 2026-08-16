@@ -10,7 +10,7 @@ from django_bolt import BoltAPI, cors
 from django_bolt.exceptions import HTTPException
 from django_bolt.openapi import OpenAPIConfig, SwaggerRenderPlugin
 from django_bolt.param_functions import Form
-from sockudo_http import Config, Sockudo
+from sockudo_http import Config, Sockudo, TriggerOptions
 
 from notifications.models import Notification
 
@@ -92,6 +92,7 @@ def create_message(payload: MessageCreateSchema) -> dict:
 
 
 @api.post("/users")
+@cors(**CORS_DEMO)
 def create_user(payload: UserCreateSchema) -> UserSchema:
     try:
         user_instance = user.objects.create_user(
@@ -129,6 +130,7 @@ def create_user(payload: UserCreateSchema) -> UserSchema:
 
 
 @api.get("/users")
+@cors(**CORS_DEMO)
 def get_users() -> list[UserSchema]:
     users = user.objects.all()
     return [
@@ -282,6 +284,7 @@ def create_dm_message(payload: DmMessageCreateSchema) -> dict:
             user_channel(payload.to_user_id),
             "notification.new",
             inbox_event,
+            TriggerOptions(idempotency_key=f"dm-notif-{inbox.id}"),
         )
         if not notify.ok:
             raise HTTPException(

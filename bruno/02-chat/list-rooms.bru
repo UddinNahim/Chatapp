@@ -1,0 +1,25 @@
+meta {
+  name: List rooms
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/chat/rooms?user_id={{userId}}
+  body: none
+  auth: none
+}
+
+docs {
+  GET /chat/rooms?user_id=
+
+  Conversation list for that user, newest activity first.
+
+  Response:
+  - total_unread: sum of unread across all rooms
+  - rooms[].unread: messages after that member's last_read_at, excluding own
+  - rooms[].last_message: preview
+  - rooms[].title: other person (direct) or group name
+
+  Switch the query to otherUserId after Send message to see unread rise.
+}

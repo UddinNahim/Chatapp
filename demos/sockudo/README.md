@@ -5,15 +5,19 @@ Django-Bolt publishes events over HTTP; Sockudo fans them out over WebSocket to 
 ## Architecture
 
 ```text
-Browser (demos/sockudo)  ←── WebSocket ──→  Sockudo (:6001)
-Django-Bolt (:8000)      ─── HTTP trigger ─→  Sockudo (:6001)
+Group/DM browser  ←── WebSocket ──→  Sockudo (:6001)
+LMS Python client ←── WebSocket ──→  Sockudo (:6001)
+Django-Bolt       ─── HTTP trigger ─→  Sockudo (:6001)
 ```
 
 | Role | What |
 |------|------|
-| **Publish** | Django `sockudo.trigger(channel, event, data)` |
-| **Subscribe** | Browser Pusher client → channel + event bind |
-| **Hub** | Sockudo (Pusher-compatible realtime server) |
+| **Publish** | Django `sockudo.trigger(channel, event, data)` + idempotency key |
+| **Subscribe (group/DM)** | Browser `@sockudo/client` Protocol V2 |
+| **Subscribe (LMS)** | `sockudo-python` Protocol V2 (`lms/client.py`) |
+| **Hub** | Sockudo |
+
+Group/DM browsers load `@sockudo/client@2.1.0` (`demos/sockudo/sockudo-v2.js`) with `protocolVersion: 2`. LMS uses [Protocol V2](https://sockudo.io/docs/clients/protocol-v2) via [sockudo-python](https://sockudo.io/docs/clients/python). Auth: `/pusher/auth` (group/DM), `/lms/auth` (LMS).
 
 Local credentials (must match Sockudo default app) in `config/settings.py` → `SOCKUDO`:
 
@@ -95,6 +99,34 @@ python3 -m http.server 5500 --bind 127.0.0.1
 |------|-----|
 | Group chat | http://127.0.0.1:5500/ — **3 client cards** (Alice / Bob / Carol) |
 | One-to-one DM + inbox | http://127.0.0.1:5500/dm.html — **2 client cards** (User 1 / User 2) |
+| WhatsApp-style rooms | http://127.0.0.1:5500/chat.html — 1:1 + group + unread |
+| LMS instructor ↔ student | http://127.0.0.1:5500/lms.html — **2 cards** + inbox |
+
+---
+
+## Demo — WhatsApp-style rooms (1:1 + group)
+
+**Files**
+
+- `chat/api.py` → rooms, messages, unread, `POST /chat/auth`
+- `demos/sockudo/chat.html`
+
+| | Value |
+|--|--------|
+| Room list | `GET /chat/rooms?user_id=` — `unread` per room + `total_unread` |
+| New 1:1 | `POST /chat/rooms` `{ kind: "direct", member_ids: [other] }` |
+| New group | `POST /chat/rooms` `{ kind: "group", title, member_ids }` |
+| Chat | `private-room.{id}` / `message.new` |
+| Inbox | `private-user.{id}` / `inbox.update` |
+
+**Test**
+
+1. Open http://127.0.0.1:5500/chat.html in **two tabs**
+2. Tab A: I am **alice**. Tab B: I am **bob**
+3. Alice: **New chat** → pick Bob → send a message
+4. Bob’s list shows the room + green unread + header total
+5. Bob opens the room — unread clears
+6. **New group** with a name and Alice+Bob+Carol — all members see it
 
 ---
 
@@ -207,6 +239,36 @@ Sender is never notified. Chat event ≠ inbox event.
 
 ---
 
+## Demo D — LMS instructor ↔ student (Protocol V2, Python)
+
+**Files**
+
+- `lms/api.py` → `POST /lms/auth`, `POST /lms/messages`
+- `demos/sockudo/lms.html` — browser `@sockudo/client` Protocol V2
+- `lms/client.py` — optional CLI (`uv run python -m lms.client`)
+
+| | Value |
+|--|--------|
+| Chat | `private-lms.{instructor}.{student}` / `message.new` |
+| Inbox | `private-lms-user.{role}.{id}` / `notification.new` |
+| Client | `sockudo-python` Protocol V2 |
+| Auth | `POST /lms/auth` |
+
+**Test**
+
+```bash
+uv run python -m lms.client
+```
+
+Wait until both sides print `subscribed`, then type:
+
+- `i hello` — instructor sends
+- `s hello` — student sends
+
+Both WebSocket clients print `message.new`; the other role also prints `notification.new`.
+
+---
+
 ## Other API routes
 
 | Method | Path | Sockudo |
@@ -220,6 +282,15 @@ Sender is never notified. Chat event ≠ inbox event.
 | `GET` | `/notifications?user_id=` | persisted inbox |
 | `POST` | `/notifications/{id}/read` | mark one read |
 | `POST` | `/notifications/read-all` | clear badge |
+| `POST` | `/lms/instructors` `/lms/students` | create demo people |
+| `GET` | `/chat/rooms` | room list + per-room unread + total |
+| `POST` | `/chat/rooms` | create 1:1 or group |
+| `POST` | `/chat/rooms/{id}/messages` | room `message.new` + inbox `inbox.update` |
+| `POST` | `/chat/rooms/{id}/read` | clear that room's unread |
+| `POST` | `/chat/auth` | `private-room.*` / `private-user.*` signature |
+| `POST` | `/lms/auth` | LMS private-channel signature |
+| `POST` | `/lms/messages` | chat `message.new` + inbox `notification.new` |
+| `GET` | `/lms/notifications` | persisted LMS inbox |
 
 ---
 
@@ -244,16 +315,24 @@ Sender is never notified. Chat event ≠ inbox event.
 | No broadcast after code change | Restart with `runbolt --dev` |
 | Sockudo crash loop / Redis DNS / push memory | Restart: `docker compose down && docker compose up sockudo` (needs `PUSH_ALLOW_MEMORY_DRIVERS=true`) |
 | DM subscribe 403 | `user_id` must match the DM pair, or own `private-user.{id}` |
-| Auth status 0 / Failed to fetch | CORS or Bolt down — hard-refresh `dm.html`; confirm `:8000` is up |
+| Auth status 0 / Failed to fetch | CORS or Bolt down — hard-refresh the page; confirm `:8000` is up |
+| `sockudo-v2.js` / `@sockudo/client` failed | CDN blocked — check Network for `cdn.jsdelivr.net` |
 
-**Order:** page must be **Connected + subscribed** before Send/POST. Events are not queued for late subscribers.
+**Order:** page must be **Connected + subscribed** before Send/POST.
+
+Protocol V2 extras:
+
+- **Drop WS → send from the other card → Resume** to see missed events replay
+- log suffix `· #serial` is the V2 recovery cursor
+- Django publish uses `TriggerOptions(idempotency_key=...)` for LMS/DM notifications
 
 ---
 
 ## Mental model
 
 - **HTTP** = write / publish (Django → Sockudo)
-- **WebSocket** = live receive (Browser ← Sockudo)
+- **WebSocket** = live receive (group/DM browser or LMS Python ← Sockudo, Protocol V2)
 - Same **channel + event** on both sides
-- Demos do not persist chat messages; **notifications** are saved in Django
-- Chat channel = live message; `private-user.{id}` = badge / toast / inbox
+- System events are `sockudo:…` (not `pusher:…`)
+- LMS chat messages persist in Django; group/DM chat logs are live + rewind
+- Chat channel = live message; inbox channel = badge / toast / inbox

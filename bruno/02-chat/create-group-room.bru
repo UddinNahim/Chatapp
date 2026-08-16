@@ -1,0 +1,40 @@
+meta {
+  name: Create group room
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/chat/rooms
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "user_id": {{userId}},
+    "kind": "group",
+    "member_ids": [{{otherUserId}}],
+    "title": "Test group"
+  }
+}
+
+script:post-response {
+  if (res.status === 200 && res.body && res.body.id) {
+    bru.setEnvVar("roomId", String(res.body.id));
+  }
+}
+
+docs {
+  POST /chat/rooms  (kind: group)
+
+  New group every time (no pair_key reuse).
+  Needs at least one other member.
+  Empty title falls back to member usernames joined by comma.
+
+  All members get inbox.update event room.created.
+  Saves roomId on 200.
+
+  400 if kind is wrong or no other members.
+  404 if a user id does not exist.
+}

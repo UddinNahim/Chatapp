@@ -77,7 +77,7 @@
       font-size: 0.8rem;
       margin: 0 0 0.6rem;
     }
-    .row { display: flex; gap: 0.4rem; }
+    .row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
     input {
       flex: 1;
       padding: 0.45rem 0.55rem;
@@ -157,18 +157,30 @@
   <header>
     <h1>LMS 1:1 — instructor ↔ student</h1>
     <p class="sub">
-      চ্যাট যায় দুজনের <code>private-lms.{instructor}.{student}</code>-এ।
-      নোটিফিকেশন যায় শুধু অন্যজনের <code>private-lms-user.{role}.{id}</code>-এ।
+      Protocol V2। চ্যাট যায়
+      <code>private-lms.{instructor}.{student}</code>-এ।
+      নোটিফিকেশন যায় শুধু অন্যজনের
+      <code>private-lms-user.{role}.{id}</code>-এ।
     </p>
     <p class="nav">
       <a href="/">Group chat</a> ·
+      <a href="/chat.html">WhatsApp rooms</a> ·
       <a href="/dm.html">User DM</a>
     </p>
-    <div class="hint" id="globalStatus">Loading…</div>
+    <div class="hint" id="globalStatus">Loading Sockudo V2…</div>
   </header>
   <div class="grid" id="cards"></div>
 
-  <script>
+  <script type="module">
+    import {
+      bindResume,
+      createSockudoClient,
+      onSubscribeError,
+      onSubscribed,
+      serialTag,
+      wireDropResume,
+    } from "./sockudo-v2.js";
+
     const API = "http://127.0.0.1:8000";
     const globalStatus = document.getElementById("globalStatus");
     const cardsEl = document.getElementById("cards");
@@ -203,6 +215,8 @@
         '<div class="row">' +
         '<input data-text placeholder="Message as ' + client.role + '…" />' +
         '<button type="button" data-send disabled>Send</button>' +
+        '<button type="button" class="ghost" data-drop>Drop WS</button>' +
+        '<button type="button" class="ghost" data-resume disabled>Resume</button>' +
         "</div>";
       cardsEl.appendChild(el);
 
@@ -214,8 +228,9 @@
       const textEl = el.querySelector("[data-text]");
       const sendBtn = el.querySelector("[data-send]");
       const readAllBtn = el.querySelector("[data-read-all]");
+      const dropBtn = el.querySelector("[data-drop]");
+      const resumeBtn = el.querySelector("[data-resume]");
       let toastTimer = null;
-      let ready = { chat: false, inbox: false };
 
       function log(msg) {
         logEl.textContent += msg + "\n";
@@ -228,7 +243,7 @@
       }
 
       function maybeEnableSend() {
-        sendBtn.disabled = !(ready.chat && ready.inbox);
+        sendBtn.disabled = sockudo.connection.state !== "connected";
       }
 
       function setUnread(count) {
@@ -266,61 +281,51 @@
         setUnread(data.unread_count);
       }
 
-      const pusher = new Pusher("app-key", {
-        wsHost: "127.0.0.1",
-        wsPort: 6001,
-        wssPort: 6001,
-        forceTLS: false,
-        encrypted: false,
-        cluster: "local",
-        enabledTransports: ["ws"],
-        disabledTransports: ["xhr_streaming", "xhr_polling", "sockjs"],
-        disableStats: true,
-        channelAuthorization: {
-          endpoint: API + "/lms/pusher/auth",
-          params: { role: client.role, person_id: String(client.personId) },
-        },
+      const sockudo = createSockudoClient({
+        endpoint: API + "/lms/auth",
+        params: { role: client.role, person_id: String(client.personId) },
       });
 
-      pusher.connection.bind("state_change", (states) => {
+      sockudo.connection.bind("state_change", (states) => {
         log("state: " + states.previous + " → " + states.current);
         setBadge(states.current, states.current === "connected" ? true : null);
+        maybeEnableSend();
       });
-      pusher.connection.bind("failed", () => {
+      sockudo.connection.bind("failed", () => {
         setBadge("failed", false);
         log("failed — is Sockudo on :6001?");
       });
+      bindResume(sockudo, log);
+      wireDropResume(sockudo, { log, setBadge, dropBtn, resumeBtn });
 
-      const channel = pusher.subscribe(channelName);
-      channel.bind("pusher:subscription_succeeded", () => {
-        log("subscribed " + channelName);
-        ready.chat = true;
-        if (ready.inbox) setBadge("subscribed", true);
+      const channel = sockudo.subscribe(channelName);
+      onSubscribed(channel, () => {
+        log("subscribed " + channelName + " (v2)");
+        setBadge("subscribed", true);
         maybeEnableSend();
       });
-      channel.bind("pusher:subscription_error", (status) => {
+      onSubscribeError(channel, (status) => {
         log("chat auth error " + JSON.stringify(status));
         setBadge("auth failed", false);
       });
       channel.bind("message.new", (data) => {
         const mine = data.sender === client.role ? " (me)" : "";
-        log(data.sender + ": " + data.text + mine);
+        log(data.sender + ": " + data.text + mine + serialTag(sockudo, channelName));
       });
 
-      const inboxCh = pusher.subscribe(inboxName);
-      inboxCh.bind("pusher:subscription_succeeded", () => {
-        log("subscribed " + inboxName);
-        ready.inbox = true;
-        if (ready.chat) setBadge("subscribed", true);
+      const inboxCh = sockudo.subscribe(inboxName);
+      onSubscribed(inboxCh, () => {
+        log("subscribed " + inboxName + " (v2)");
+        setBadge("subscribed", true);
         maybeEnableSend();
         loadInbox();
       });
-      inboxCh.bind("pusher:subscription_error", (status) => {
+      onSubscribeError(inboxCh, (status) => {
         log("inbox auth error " + JSON.stringify(status));
         setBadge("auth failed", false);
       });
       inboxCh.bind("notification.new", (n) => {
-        log("notif: " + n.title + " — " + n.body);
+        log("notif: " + n.title + " — " + n.body + serialTag(sockudo, inboxName));
         setUnread(n.unread_count);
         showToast(n.title, n.body);
         renderInboxItem(n, true);
@@ -350,7 +355,7 @@
         } catch (err) {
           log("POST error: " + err);
         } finally {
-          sendBtn.disabled = false;
+          maybeEnableSend();
         }
       }
 
@@ -378,18 +383,14 @@
     }
 
     async function startAll() {
-      if (typeof Pusher === "undefined") {
-        globalStatus.textContent = "ERROR: Pusher SDK failed to load";
-        return;
-      }
       try {
         const instructor = await createPerson("/lms/instructors", "Rahim");
         const student = await createPerson("/lms/students", "Karim");
         const pair = { instructorId: instructor.id, studentId: student.id };
         globalStatus.textContent =
-          "Instructor " + instructor.name + " (#" + instructor.id +
+          "Protocol V2 · Instructor " + instructor.name + " (#" + instructor.id +
           ") ↔ student " + student.name + " (#" + student.id +
-          ")। মেসেজ দুই card-এ; নোটিফিকেশন শুধু অন্যজনের বেল/টোস্ট/inbox-এ।";
+          ")। দুই card subscribed হলে Send করো।";
         mountCard(
           { role: "instructor", title: "Instructor", name: instructor.name, personId: instructor.id },
           pair
@@ -403,19 +404,7 @@
       }
     }
 
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/pusher-js@8.4.0-rc2/dist/web/pusher.min.js";
-    script.onload = startAll;
-    script.onerror = () => {
-      const fallback = document.createElement("script");
-      fallback.src = "https://js.pusher.com/8.4.0/pusher.min.js";
-      fallback.onload = startAll;
-      fallback.onerror = () => {
-        globalStatus.textContent = "ERROR: could not load Pusher from CDN";
-      };
-      document.head.appendChild(fallback);
-    };
-    document.head.appendChild(script);
+    startAll();
   </script>
 </body>
 </html>

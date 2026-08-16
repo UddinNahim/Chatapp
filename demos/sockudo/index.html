@@ -88,7 +88,7 @@
       font-size: 0.8rem;
       margin: 0 0 0.6rem;
     }
-    .row { display: flex; gap: 0.4rem; }
+    .row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
     input {
       flex: 1;
       padding: 0.45rem 0.55rem;
@@ -106,26 +106,41 @@
       font: inherit;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.ghost {
+      background: #fff;
+      color: var(--accent);
+      border-color: #b7dfc9;
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>Group chat — 3 clients, one public channel</h1>
     <p class="sub">
-      তিনটা card = তিনটা আলাদা browser client। সবাই
-      <code>chat-general</code>-এ subscribe করে। একজন Send করলে
-      <strong>তিনজনেই</strong> event পায় (lobby / broadcast)।
+      Protocol V2: recovery + rewind। তিনটা card = তিনটা আলাদা client।
+      সবাই <code>chat-general</code>-এ subscribe করে। একজন Send করলে
+      <strong>তিনজনেই</strong> event পায়।
     </p>
     <p class="nav">
+      <a href="/chat.html">WhatsApp rooms</a> ·
       <a href="/dm.html">1:1 DM (2 cards)</a> ·
-      <a href="/lms.html">LMS instructor ↔ student</a>
+      <a href="/lms.html">LMS (Python V2)</a>
     </p>
-    <div class="hint" id="globalStatus">Loading Pusher SDK…</div>
+    <div class="hint" id="globalStatus">Loading Sockudo V2…</div>
   </header>
 
   <div class="grid" id="cards"></div>
 
-  <script>
+  <script type="module">
+    import {
+      bindResume,
+      createSockudoClient,
+      onSubscribeError,
+      onSubscribed,
+      serialTag,
+      wireDropResume,
+    } from "./sockudo-v2.js";
+
     const CLIENTS = [
       { id: "a", name: "Alice", color: "#0b6e4f" },
       { id: "b", name: "Bob", color: "#0b57d0" },
@@ -134,20 +149,6 @@
 
     const globalStatus = document.getElementById("globalStatus");
     const cardsEl = document.getElementById("cards");
-
-    function pusherOptions() {
-      return {
-        wsHost: "127.0.0.1",
-        wsPort: 6001,
-        wssPort: 6001,
-        forceTLS: false,
-        encrypted: false,
-        cluster: "local",
-        enabledTransports: ["ws"],
-        disabledTransports: ["xhr_streaming", "xhr_polling", "sockjs"],
-        disableStats: true,
-      };
-    }
 
     function mountCard(client) {
       const el = document.createElement("article");
@@ -160,6 +161,8 @@
         '<div class="row">' +
         '<input data-text placeholder="Say something as ' + client.name + '…" />' +
         '<button type="button" data-send disabled>Send</button>' +
+        '<button type="button" class="ghost" data-drop>Drop WS</button>' +
+        '<button type="button" class="ghost" data-resume disabled>Resume</button>' +
         "</div>";
       cardsEl.appendChild(el);
 
@@ -167,6 +170,8 @@
       const badge = el.querySelector("[data-badge]");
       const textEl = el.querySelector("[data-text]");
       const sendBtn = el.querySelector("[data-send]");
+      const dropBtn = el.querySelector("[data-drop]");
+      const resumeBtn = el.querySelector("[data-resume]");
 
       function log(msg) {
         logEl.textContent += msg + "\n";
@@ -178,27 +183,42 @@
         badge.className = "badge " + (ok === true ? "ok" : ok === false ? "bad" : "");
       }
 
-      const pusher = new Pusher("app-key", pusherOptions());
+      const sockudo = createSockudoClient();
 
-      pusher.connection.bind("state_change", (states) => {
+      sockudo.connection.bind("state_change", (states) => {
         log("state: " + states.previous + " → " + states.current);
         setBadge(states.current, states.current === "connected" ? true : null);
+        sendBtn.disabled = states.current !== "connected";
       });
 
-      pusher.connection.bind("failed", () => {
+      sockudo.connection.bind("failed", () => {
         setBadge("failed", false);
         log("failed — is Sockudo on :6001?");
       });
+      bindResume(sockudo, log);
+      wireDropResume(sockudo, {
+        log,
+        setBadge,
+        dropBtn,
+        resumeBtn,
+        onDropped() {
+          sendBtn.disabled = true;
+        },
+      });
 
-      const channel = pusher.subscribe("chat-general");
-      channel.bind("pusher:subscription_succeeded", () => {
-        log("subscribed to chat-general");
+      const channel = sockudo.subscribe("chat-general");
+      onSubscribed(channel, () => {
+        log("subscribed to chat-general (v2)");
         setBadge("subscribed", true);
-        sendBtn.disabled = false;
+        sendBtn.disabled = sockudo.connection.state !== "connected";
+      });
+      onSubscribeError(channel, (status) => {
+        log("subscribe error " + JSON.stringify(status));
+        setBadge("auth failed", false);
       });
       channel.bind("message.new", (data) => {
         const mine = data.username === client.name ? " (me)" : "";
-        log(data.username + ": " + data.text + mine);
+        log(data.username + ": " + data.text + mine + serialTag(sockudo, "chat-general"));
       });
 
       async function send() {
@@ -220,7 +240,7 @@
         } catch (err) {
           log("POST error: " + err);
         } finally {
-          sendBtn.disabled = false;
+          sendBtn.disabled = sockudo.connection.state !== "connected";
         }
       }
 
@@ -231,28 +251,12 @@
     }
 
     function startAll() {
-      if (typeof Pusher === "undefined") {
-        globalStatus.textContent = "ERROR: Pusher SDK failed to load";
-        return;
-      }
       globalStatus.textContent =
-        "৩টা আলাদা WebSocket client → একই public channel। যেকোনো card থেকে Send করো — তিনটাতেই দেখা যাবে।";
+        "Protocol V2 · ৩টা client, একই public channel। Drop WS → অন্যজন পাঠাও → Resume = মিস মেসেজ ফিরে আসবে।";
       CLIENTS.forEach(mountCard);
     }
 
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/pusher-js@8.4.0-rc2/dist/web/pusher.min.js";
-    script.onload = startAll;
-    script.onerror = () => {
-      const fallback = document.createElement("script");
-      fallback.src = "https://js.pusher.com/8.4.0/pusher.min.js";
-      fallback.onload = startAll;
-      fallback.onerror = () => {
-        globalStatus.textContent = "ERROR: could not load Pusher from CDN";
-      };
-      document.head.appendChild(fallback);
-    };
-    document.head.appendChild(script);
+    startAll();
   </script>
 </body>
 </html>

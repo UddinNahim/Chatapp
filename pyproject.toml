@@ -8,13 +8,16 @@ dependencies = [
     "django>=6.1",
     "django-bolt>=0.10.0",
     "sockudo-http-python",
+    "sockudo-python",
     "websocket-client>=1.9.0",
 ]
 
 [tool.uv.workspace]
 members = [
     "sockudo/server-sdks/sockudo-http-python",
+    "sockudo/client-sdks/sockudo-python",
 ]
 
 [tool.uv.sources]
 sockudo-http-python = { workspace = true }
+sockudo-python = { workspace = true }

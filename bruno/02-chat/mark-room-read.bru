@@ -1,0 +1,31 @@
+meta {
+  name: Mark room read
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/chat/rooms/{{roomId}}/read
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "user_id": {{otherUserId}}
+  }
+}
+
+docs {
+  POST /chat/rooms/{room_id}/read
+
+  User opened the room.
+  1. RoomMember.last_read_at = now  → that room's unread becomes 0
+  2. All incoming receipts get delivered_at (if missing) and read_at
+  3. Room channel receipt.update → sender ticks turn read
+
+  Response: { room_id, unread: 0, total_unread }
+
+  unread badge uses last_read_at.
+  Blue ticks use MessageReceipt.read_at.
+}

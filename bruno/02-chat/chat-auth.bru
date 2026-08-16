@@ -1,0 +1,33 @@
+meta {
+  name: Chat channel auth
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/chat/auth
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  socket_id: {{socketId}}
+  channel_name: private-user.{{userId}}
+  user_id: {{userId}}
+}
+
+docs {
+  POST /chat/auth  (form fields, not JSON)
+
+  Sockudo private-channel HMAC. The browser client calls this automatically.
+  Allowed channels:
+  - private-room.{id}  if user_id is a member
+  - private-user.{id}  only for that same user
+
+  403 for any other channel or someone else's inbox/room.
+
+  Try channel_name:
+  - private-user.{{userId}}           → 200
+  - private-room.{{roomId}}           → 200 if member
+  - private-user.{{otherUserId}}      → 403 when user_id is userId
+}

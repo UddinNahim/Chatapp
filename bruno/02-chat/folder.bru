@@ -1,0 +1,11 @@
+meta {
+  name: Chat
+}
+
+docs {
+  Room list, 1:1 / group create, messages, unread, delivery, and read receipts.
+
+  Channels (Sockudo, not these HTTP routes):
+  - private-room.{id}  → message.new, receipt.update
+  - private-user.{id}  → inbox.update (list + unread)
+}

@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django_bolt',
     'notifications',
     'lms',
+    'chat',
 ]
 
 MIDDLEWARE = [
